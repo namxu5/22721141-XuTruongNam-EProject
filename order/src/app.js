@@ -16,72 +16,88 @@ class App {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
-    console.log("MongoDB connected");
+    console.log("✅ MongoDB connected");
   }
 
   async disconnectDB() {
     await mongoose.disconnect();
-    console.log("MongoDB disconnected");
+    console.log("🛑 MongoDB disconnected");
+  }
+
+  // 🧩 Hàm kết nối RabbitMQ có retry
+  async connectToRabbitMQ(retries = 10, delay = 5000) {
+    const amqpServer = process.env.RABBITMQ_URL || "amqp://rabbitmq:5672";
+
+    for (let i = 0; i < retries; i++) {
+      try {
+        const connection = await amqp.connect(amqpServer);
+        console.log("✅ Connected to RabbitMQ");
+        return connection;
+      } catch (err) {
+        console.warn(`⏳ RabbitMQ not ready (retry ${i + 1}/${retries})`);
+        await new Promise(res => setTimeout(res, delay));
+      }
+    }
+
+    throw new Error("❌ Failed to connect to RabbitMQ after multiple retries");
   }
 
   async setupOrderConsumer() {
     console.log("Connecting to RabbitMQ...");
-  
+
+    // Thêm delay nhỏ để chắc chắn RabbitMQ container đã start
     setTimeout(async () => {
       try {
-        const amqpServer = "amqp://rabbitmq:5672";
-        const connection = await amqp.connect(amqpServer);
-        console.log("Connected to RabbitMQ");
+        const connection = await this.connectToRabbitMQ();
         const channel = await connection.createChannel();
         await channel.assertQueue("orders");
-  
+        console.log("📥 Listening for messages on 'orders' queue...");
+
         channel.consume("orders", async (data) => {
-          // Consume messages from the order queue on buy
-          console.log("Consuming ORDER service");
+          console.log("📦 Consuming ORDER message...");
           const { products, username, orderId } = JSON.parse(data.content);
-  
+
+          // Tạo order mới
           const newOrder = new Order({
             products,
             user: username,
             totalPrice: products.reduce((acc, product) => acc + product.price, 0),
           });
-  
-          // Save order to DB
+
+          // Lưu vào MongoDB
           await newOrder.save();
-  
-          // Send ACK to ORDER service
+
+          // Gửi ACK để RabbitMQ biết message này xử lý xong
           channel.ack(data);
-          console.log("Order saved to DB and ACK sent to ORDER queue");
-  
-          // Send fulfilled order to PRODUCTS service
-          // Include orderId in the message
+          console.log("✅ Order saved & ACK sent");
+
+          // Gửi thông điệp sang hàng đợi 'products'
           const { user, products: savedProducts, totalPrice } = newOrder.toJSON();
           channel.sendToQueue(
             "products",
             Buffer.from(JSON.stringify({ orderId, user, products: savedProducts, totalPrice }))
           );
+
+          console.log("➡️ Sent order data to 'products' queue");
         });
+
       } catch (err) {
-        console.error("Failed to connect to RabbitMQ:", err.message);
+        console.error("❌ Failed to setup RabbitMQ consumer:", err.message);
       }
-    }, 10000); // add a delay to wait for RabbitMQ to start in docker-compose
+    }, 5000); // giảm delay xuống 5s (có retry nên không cần 15–19s nữa)
   }
-
-
 
   start() {
     this.server = this.app.listen(config.port, () =>
-      console.log(`Server started on port ${config.port}`)
+      console.log(`🚀 Server started on port ${config.port}`)
     );
   }
 
   async stop() {
     await mongoose.disconnect();
     this.server.close();
-    console.log("Server stopped");
+    console.log("🛑 Server stopped");
   }
 }
-
-
 
 module.exports = App;
