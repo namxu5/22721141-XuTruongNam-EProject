@@ -9,7 +9,6 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,41 +18,30 @@ jobs:
         with:
           node-version: 18
 
-      # Cài dependencies cho từng service
-      - name: Install dependencies for Auth service
+      - name: Install dependencies for all services
         run: |
-          cd auth
-          npm ci
-          cd ..
+          set -e
+          for d in api-gateway auth product order; do
+            if [ -f "$d/package.json" ]; then
+              echo "Installing deps for $d"
+              (cd $d && npm ci || npm install)
+            fi
+          done
 
-      - name: Install dependencies for Product service
+      - name: Run tests for services that have tests
         run: |
-          cd product
-          npm ci
-          cd ..
-
-      - name: Install dependencies for Order service
-        run: |
-          cd order
-          npm ci
-          cd ..
-
-      # (Thêm service khác nếu có)
-      # - name: Install dependencies for Payment service
-      #   run: |
-      #     cd payment
-      #     npm ci
-      #     cd ..
-
-      - name: Run tests
-        run: |
-          npm test --silent || echo "No test scripts defined"
+          set -e
+          for d in auth product; do
+            if [ -f "$d/package.json" ]; then
+              echo "Running tests for $d"
+              (cd $d && npm test --silent)
+            fi
+          done
 
   build-and-push:
     needs: build-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,13 +49,13 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ github.sha }} .
-
+      
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push Docker image
+      - name: Push image
         run: |
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ github.sha }}
