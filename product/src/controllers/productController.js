@@ -1,6 +1,7 @@
 const Product = require("../models/product");
 const messageBroker = require("../utils/messageBroker");
-const { v4: uuidv4 } = require('uuid');
+const uuid = require('uuid');
+
 
 /**
  * Class to hold the API implementation for the product services
