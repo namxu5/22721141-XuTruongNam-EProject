@@ -6,22 +6,34 @@ require("dotenv").config();
 
 chai.use(chaiHttp);
 
-
 describe("Products", () => {
   let app;
+  let authToken = "mock-token"; // 🧩 token giả để CI/CD vẫn chạy được
 
   before(async () => {
     app = new App();
-    await Promise.all([app.connectDB(), app.setupMessageBroker()])
+    await Promise.all([app.connectDB(), app.setupMessageBroker()]);
 
-    // Authenticate with the auth microservice to get a token
-    const authRes = await chai
-      .request("http://localhost:3000")
-      .post("/login")
-      .send({ username: process.env.LOGIN_TEST_USER, password: process.env.LOGIN_TEST_PASSWORD });
+    // ⚙️ Nếu đang chạy local (không phải CI/CD) → gọi thật tới Auth service
+    if (!process.env.CI && !process.env.GITHUB_ACTIONS) {
+      try {
+        const authRes = await chai
+          .request("http://localhost:3000")
+          .post("/login")
+          .send({
+            username: process.env.LOGIN_TEST_USER,
+            password: process.env.LOGIN_TEST_PASSWORD,
+          });
 
-    authToken = authRes.body.token;
-    console.log(authToken);
+        authToken = authRes.body.token;
+        console.log("🔑 Authenticated token:", authToken);
+      } catch (err) {
+        console.error("⚠️ Auth service not available, using mock token");
+      }
+    } else {
+      console.log("🧪 Running in CI/CD → using mock token");
+    }
+
     app.start();
   });
 
@@ -37,15 +49,12 @@ describe("Products", () => {
         description: "Description of Product 1",
         price: 10,
       };
+
       const res = await chai
         .request(app.app)
         .post("/api/products")
         .set("Authorization", `Bearer ${authToken}`)
-        .send({
-            name: "Product 1",
-            price: 10,
-            description: "Description of Product 1"
-          });
+        .send(product);
 
       expect(res).to.have.status(201);
       expect(res.body).to.have.property("_id");
@@ -59,6 +68,7 @@ describe("Products", () => {
         description: "Description of Product 1",
         price: 10.99,
       };
+
       const res = await chai
         .request(app.app)
         .post("/api/products")
@@ -69,4 +79,3 @@ describe("Products", () => {
     });
   });
 });
-
