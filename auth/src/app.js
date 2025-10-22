@@ -8,22 +8,28 @@ class App {
   constructor() {
     this.app = express();
     this.authController = new AuthController();
-    this.connectDB();
     this.setMiddlewares();
     this.setRoutes();
+    this.server = null; // để stop() hoạt động an toàn
   }
 
   async connectDB() {
-    await mongoose.connect(config.mongoURI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    console.log("MongoDB connected");
+    try {
+      const mongoURI = config.mongoURI || "mongodb://127.0.0.1:27017/auth_db";
+      await mongoose.connect(mongoURI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      });
+      console.log("✅ MongoDB connected");
+    } catch (err) {
+      console.error("❌ MongoDB connection failed:", err.message);
+      process.exit(1);
+    }
   }
 
   async disconnectDB() {
     await mongoose.disconnect();
-    console.log("MongoDB disconnected");
+    console.log("🛑 MongoDB disconnected");
   }
 
   setMiddlewares() {
@@ -37,14 +43,16 @@ class App {
     this.app.get("/dashboard", authMiddleware, (req, res) => res.json({ message: "Welcome to dashboard" }));
   }
 
-  start() {
-    this.server = this.app.listen(3000, () => console.log("Server started on port 3000"));
+  async start() {
+    await this.connectDB(); // 👈 đảm bảo kết nối MongoDB xong rồi mới start server
+    const port = process.env.PORT || 3000;
+    this.server = this.app.listen(port, () => console.log(`🚀 Server started on port ${port}`));
   }
 
   async stop() {
     await mongoose.disconnect();
-    this.server.close();
-    console.log("Server stopped");
+    if (this.server) this.server.close();
+    console.log("🛑 Server stopped");
   }
 }
 
