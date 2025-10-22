@@ -10,7 +10,6 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
 
-    # 🧩 1. Chạy MongoDB làm service test
     services:
       mongodb:
         image: mongo:6
@@ -31,7 +30,6 @@ jobs:
         with:
           node-version: 18
 
-      # 🧩 2. Cài dependencies cho từng service
       - name: Install dependencies for all services
         run: |
           set -e
@@ -42,7 +40,6 @@ jobs:
             fi
           done
 
-      # 🧩 3. Chạy test (có MongoDB local)
       - name: Run tests for services that have tests
         env:
           MONGODB_AUTH_URI: mongodb://127.0.0.1:27017/auth_db
@@ -72,7 +69,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 🧩 4. Build và push từng service riêng (auth, product, gateway, order)
       - name: Build and push Docker images
         run: |
           set -e
@@ -83,4 +79,23 @@ jobs:
               docker build -t $IMAGE_NAME $d
               docker push $IMAGE_NAME
             fi
+          done
+
+  # 🧩 5. Tự động pull image về máy runner local
+  pull-to-local:
+    needs: build-and-push
+    runs-on: self-hosted   # chạy trên runner bạn đã cấu hình ở Windows
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Login Docker Hub
+        run: |
+          docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
+
+      - name: Pull latest images
+        run: |
+          for d in api-gateway auth product order; do
+            IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:${{ github.sha }}
+            echo "Pulling $IMAGE_NAME"
+            docker pull $IMAGE_NAME
           done
