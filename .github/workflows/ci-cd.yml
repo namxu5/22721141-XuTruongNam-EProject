@@ -80,9 +80,3 @@ jobs:
               docker push $IMAGE_NAME
             fi
           done
-
-<<<<<<< HEAD
- 
-=======
- 
->>>>>>> 4a8db768f40a39a563a90e9f5e42fd6e2374153c
