@@ -81,7 +81,7 @@ jobs:
             fi
           done
 
-  # 🧩 5. Tự động pull image về máy runner local (Windows PowerShell)
+  # 🧩 5. Pull & Run images trên self-hosted Windows runner
   pull-to-local:
     needs: build-and-push
     runs-on: self-hosted
@@ -94,6 +94,7 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
+          Write-Host "🔐 Logging into Docker Hub..."
           docker login -u $env:DOCKERHUB_USERNAME -p $env:DOCKERHUB_TOKEN
 
       - name: Pull latest images
@@ -104,8 +105,8 @@ jobs:
         run: |
           $services = "api-gateway","auth","product","order"
           foreach ($d in $services) {
-            $imageName = $env:DOCKERHUB_USERNAME + "/" + $d + ":" + $env:GITHUB_SHA
-            Write-Host "Pulling $imageName"
+            $imageName = "$($env:DOCKERHUB_USERNAME)/$d:$($env:GITHUB_SHA)"
+            Write-Host "⬇️ Pulling $imageName"
             docker pull $imageName
           }
 
@@ -114,10 +115,11 @@ jobs:
         run: |
           $services = "api-gateway","auth","product","order"
           foreach ($d in $services) {
-            if (docker ps -a --format "{{.Names}}" | Select-String -Pattern "^$d$") {
-              Write-Host "Stopping and removing old container: $d"
-              docker stop $d
-              docker rm $d
+            $exists = docker ps -a --format "{{.Names}}" | Select-String -Pattern "^$d$"
+            if ($exists) {
+              Write-Host "🛑 Stopping and removing old container: $d"
+              docker stop $d | Out-Null
+              docker rm $d | Out-Null
             }
           }
 
@@ -135,7 +137,7 @@ jobs:
           }
           foreach ($d in $services.Keys) {
             $port = $services[$d]
-            $imageName = $env:DOCKERHUB_USERNAME + "/" + $d + ":" + $env:GITHUB_SHA
-            Write-Host "Running container for $d on port $port"
+            $imageName = "$($env:DOCKERHUB_USERNAME)/$d:$($env:GITHUB_SHA)"
+            Write-Host "🚀 Running container for $d on port $port"
             docker run -d --name $d -p "$port:8000" $imageName
           }
