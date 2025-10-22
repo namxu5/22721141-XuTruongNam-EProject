@@ -10,7 +10,6 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
 
-    # 🧩 1. Chạy MongoDB làm service test
     services:
       mongodb:
         image: mongo:6
@@ -31,7 +30,6 @@ jobs:
         with:
           node-version: 18
 
-      # 🧩 2. Cài dependencies cho từng service
       - name: Install dependencies for all services
         run: |
           set -e
@@ -42,7 +40,6 @@ jobs:
             fi
           done
 
-      # 🧩 3. Chạy test (có MongoDB local)
       - name: Run tests for services that have tests
         env:
           MONGODB_AUTH_URI: mongodb://127.0.0.1:27017/auth_db
@@ -72,7 +69,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 🧩 4. Build và push từng service riêng (auth, product, gateway, order)
       - name: Build and push Docker images
         run: |
           set -e
@@ -84,3 +80,5 @@ jobs:
               docker push $IMAGE_NAME
             fi
           done
+
+ 
