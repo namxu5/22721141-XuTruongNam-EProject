@@ -102,7 +102,7 @@ jobs:
         run: |
           $services = "api-gateway","auth","product","order"
           foreach ($d in $services) {
-            $imageName = "$($env:DOCKERHUB_USERNAME)/$d:$($env:GITHUB_SHA)"
+            $imageName = "${env:DOCKERHUB_USERNAME}/$d:${env:GITHUB_SHA}"
             Write-Host "Pulling $imageName"
             docker pull $imageName
           }
@@ -131,7 +131,7 @@ jobs:
           }
           foreach ($d in $services.Keys) {
             $port = $services[$d]
-            $imageName = "$($env:DOCKERHUB_USERNAME)/$d:$($env:GITHUB_SHA)"
+            $imageName = "${env:DOCKERHUB_USERNAME}/$d:${env:GITHUB_SHA}"
             Write-Host "Running container for $d on port $port"
             docker run -d --name $d -p "$port:8000" $imageName
           }
