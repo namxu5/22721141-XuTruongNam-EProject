@@ -1,5 +1,6 @@
 const chai = require("chai");
 const chaiHttp = require("chai-http");
+const jwt = require("jsonwebtoken"); // 👈 thêm dòng này
 const App = require("../app");
 const expect = chai.expect;
 require("dotenv").config();
@@ -8,13 +9,13 @@ chai.use(chaiHttp);
 
 describe("Products", () => {
   let app;
-  let authToken = "mock-token"; // 🧩 token giả để CI/CD vẫn chạy được
+  let authToken;
 
   before(async () => {
     app = new App();
     await Promise.all([app.connectDB(), app.setupMessageBroker()]);
 
-    // ⚙️ Nếu đang chạy local (không phải CI/CD) → gọi thật tới Auth service
+    // ⚙️ Nếu đang chạy local → gọi thật Auth service
     if (!process.env.CI && !process.env.GITHUB_ACTIONS) {
       try {
         const authRes = await chai
@@ -31,7 +32,13 @@ describe("Products", () => {
         console.error("⚠️ Auth service not available, using mock token");
       }
     } else {
-      console.log("🧪 Running in CI/CD → using mock token");
+      // 🧪 CI/CD: tạo token JWT giả hợp lệ
+      console.log("🧪 Running in CI/CD → generating mock JWT");
+      authToken = jwt.sign(
+        { username: "ci_user", role: "tester" },
+        process.env.JWT_SECRET || "your_jwt_secret_here",
+        { expiresIn: "1h" }
+      );
     }
 
     app.start();
