@@ -1,5 +1,7 @@
+version: "3.9"
+
 services:
-  # MongoDB
+  # 🧩 MongoDB
   mongodb:
     image: mongo:7
     container_name: mongodb
@@ -9,8 +11,15 @@ services:
       - mongo_data:/data/db
     networks:
       - eproject-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: always
 
-  # RabbitMQ
+  # 🧩 RabbitMQ
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: rabbitmq
@@ -19,10 +28,7 @@ services:
       RABBITMQ_DEFAULT_PASS: guest
     ports:
       - "5672:5672"
-      - "15672:15672" # web UI
-    # volumes:
-    #   - rabbitmq_data:/var/lib/rabbitmq
-    #   - rabbitmq_log:/var/log/rabbitmq
+      - "15672:15672" # Web UI
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 10s
@@ -31,8 +37,9 @@ services:
       start_period: 20s
     networks:
       - eproject-network
+    restart: always
 
-  # Auth service
+  # 🧩 Auth service
   auth:
     build: ./auth
     container_name: auth_service
@@ -41,13 +48,16 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - mongodb
-      - rabbitmq
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - eproject-network
-    command: ["node", "index.js"]
+    command: sh -c "sleep 5 && node index.js"
+    restart: always
 
-  # Product service
+  # 🧩 Product service
   product:
     build: ./product
     container_name: product_service
@@ -56,13 +66,18 @@ services:
     ports:
       - "3001:3001"
     depends_on:
-      - mongodb
-      - rabbitmq
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      auth:
+        condition: service_started
     networks:
       - eproject-network
-    command: ["node", "index.js"]
+    command: sh -c "sleep 7 && node index.js"
+    restart: always
 
-  # Order service
+  # 🧩 Order service
   order:
     build: ./order
     container_name: order_service
@@ -71,15 +86,48 @@ services:
     ports:
       - "3002:3002"
     depends_on:
-      - mongodb
-      - rabbitmq
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      auth:
+        condition: service_started
+      product:
+        condition: service_started
     networks:
       - eproject-network
-    command: ["node", "index.js"]
+    command: sh -c "sleep 10 && node index.js"
+    restart: always
 
+  # 🧩 API Gateway
+  api-gateway:
+    build: ./api-gateway
+    container_name: api_gateway_service
+    env_file:
+      - ./api-gateway/.env
+    ports:
+      - "3003:3003"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      auth:
+        condition: service_started
+      order:
+        condition: service_started
+      product:
+        condition: service_started
+    networks:
+      - eproject-network
+    command: sh -c "sleep 12 && node index.js"
+    restart: always
+
+# 🧱 Volumes để lưu trữ dữ liệu MongoDB
 volumes:
   mongo_data:
 
+# 🌐 Mạng nội bộ giữa các service
 networks:
   eproject-network:
     driver: bridge
