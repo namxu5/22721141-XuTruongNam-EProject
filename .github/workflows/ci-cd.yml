@@ -35,7 +35,7 @@ jobs:
           set -e
           for d in api-gateway auth product order; do
             if [ -f "$d/package.json" ]; then
-              echo "Installing deps for $d"
+              echo "Installing dependencies for $d"
               (cd $d && npm ci || npm install)
             fi
           done
@@ -81,7 +81,6 @@ jobs:
             fi
           done
 
-  # 🧩 5. Pull & Run images trên self-hosted Windows runner
   pull-to-local:
     needs: build-and-push
     runs-on: self-hosted
@@ -94,7 +93,7 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          Write-Host "🔐 Logging into Docker Hub..."
+          Write-Host "Logging into Docker Hub..."
           docker login -u $env:DOCKERHUB_USERNAME -p $env:DOCKERHUB_TOKEN
 
       - name: Pull latest images
@@ -103,23 +102,24 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
+          Write-Host "Pulling latest Docker images..."
           $services = "api-gateway","auth","product","order"
           foreach ($d in $services) {
-            $imageName = "$($env:DOCKERHUB_USERNAME)/$d:$($env:GITHUB_SHA)"
-            Write-Host "⬇️ Pulling $imageName"
+            $imageName = $env:DOCKERHUB_USERNAME + "/" + $d + ":" + $env:GITHUB_SHA
+            Write-Host "Pulling $imageName"
             docker pull $imageName
           }
 
       - name: Stop and remove old containers
         shell: pwsh
         run: |
+          Write-Host "Checking and removing old containers if they exist..."
           $services = "api-gateway","auth","product","order"
           foreach ($d in $services) {
-            $exists = docker ps -a --format "{{.Names}}" | Select-String -Pattern "^$d$"
-            if ($exists) {
-              Write-Host "🛑 Stopping and removing old container: $d"
-              docker stop $d | Out-Null
-              docker rm $d | Out-Null
+            if (docker ps -a --format "{{.Names}}" | Select-String -Pattern "^$d$") {
+              Write-Host "Stopping and removing old container: $d"
+              docker stop $d
+              docker rm $d
             }
           }
 
@@ -129,6 +129,7 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
+          Write-Host "Starting new containers..."
           $services = @{
             "api-gateway" = 8000
             "auth"        = 8001
@@ -137,7 +138,7 @@ jobs:
           }
           foreach ($d in $services.Keys) {
             $port = $services[$d]
-            $imageName = "$($env:DOCKERHUB_USERNAME)/$d:$($env:GITHUB_SHA)"
-            Write-Host "🚀 Running container for $d on port $port"
+            $imageName = $env:DOCKERHUB_USERNAME + "/" + $d + ":" + $env:GITHUB_SHA
+            Write-Host "Running container for $d on port $port"
             docker run -d --name $d -p "$port:8000" $imageName
           }
