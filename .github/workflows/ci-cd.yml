@@ -10,7 +10,7 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
 
-    # 🧩 1. Chạy MongoDB làm service test
+    # 🧩 1. Chạy MongoDB & RabbitMQ làm service test
     services:
       mongodb:
         image: mongo:6
@@ -18,6 +18,17 @@ jobs:
           - 27017:27017
         options: >-
           --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -42,10 +53,11 @@ jobs:
             fi
           done
 
-      # 🧩 3. Chạy test (có MongoDB local)
+      # 🧩 3. Chạy test (có MongoDB & RabbitMQ local)
       - name: Run tests for services that have tests
         env:
           MONGODB_AUTH_URI: mongodb://127.0.0.1:27017/auth_db
+          RABBITMQ_URI: amqp://guest:guest@127.0.0.1:5672
           NODE_ENV: test
           JWT_SECRET: test_secret
         run: |
