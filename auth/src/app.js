@@ -7,29 +7,28 @@ const AuthController = require("./controllers/authController");
 class App {
   constructor() {
     this.app = express();
-    this.authController = new AuthController();
+    this.authController = new AuthController(); // ✅ THÊM DÒNG NÀY
+    this.connectDB();
     this.setMiddlewares();
     this.setRoutes();
-    this.server = null; // để stop() hoạt động an toàn
   }
 
   async connectDB() {
     try {
-      const mongoURI = config.mongoURI || "mongodb://127.0.0.1:27017/auth_db";
-      await mongoose.connect(mongoURI, {
+      await mongoose.connect(config.mongoURI, {
         useNewUrlParser: true,
         useUnifiedTopology: true,
       });
       console.log("✅ MongoDB connected");
     } catch (err) {
-      console.error("❌ MongoDB connection failed:", err.message);
+      console.error("❌ MongoDB connection error:", err.message);
       process.exit(1);
     }
   }
 
   async disconnectDB() {
     await mongoose.disconnect();
-    console.log("🛑 MongoDB disconnected");
+    console.log("🔌 MongoDB disconnected");
   }
 
   setMiddlewares() {
@@ -39,20 +38,24 @@ class App {
 
   setRoutes() {
     this.app.post("/login", (req, res) => this.authController.login(req, res));
-    this.app.post("/register", (req, res) => this.authController.register(req, res));
-    this.app.get("/dashboard", authMiddleware, (req, res) => res.json({ message: "Welcome to dashboard" }));
+    this.app.post("/register", (req, res) =>
+      this.authController.register(req, res)
+    );
+    this.app.get("/dashboard", authMiddleware, (req, res) =>
+      res.json({ message: "Welcome to dashboard" })
+    );
   }
 
-  async start() {
-    await this.connectDB(); // 👈 đảm bảo kết nối MongoDB xong rồi mới start server
-    const port = process.env.PORT || 3000;
-    this.server = this.app.listen(port, () => console.log(`🚀 Server started on port ${port}`));
+  start() {
+    const port = process.env.PORT || 3000; // ✅ Lấy port từ .env
+    this.server = this.app.listen(port, () =>
+      console.log(`🚀 Server started on port ${port}`)
+    );
   }
 
   async stop() {
-    await mongoose.disconnect();
-    if (this.server) this.server.close();
-    console.log("🛑 Server stopped");
+    await this.disconnectDB();
+    this.server.close(() => console.log("🛑 Server stopped"));
   }
 }
 
