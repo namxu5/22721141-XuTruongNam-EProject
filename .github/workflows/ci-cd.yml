@@ -81,7 +81,7 @@ jobs:
             fi
           done
 
-  # 🧩 5. Tự động pull image về máy runner local (PowerShell)
+  # 🧩 5. Pull image và chạy container trên runner local (PowerShell)
   pull-to-local:
     needs: build-and-push
     runs-on: self-hosted
@@ -89,24 +89,49 @@ jobs:
 
     steps:
       - name: Login Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
+          docker login -u $env:DOCKERHUB_USERNAME -p $env:DOCKERHUB_TOKEN
 
       - name: Pull latest images
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           $services = "api-gateway","auth","product","order"
           foreach ($d in $services) {
-            $imageName = "${{ secrets.DOCKERHUB_USERNAME }}/$d:${{ github.sha }}"
+            $imageName = "$($env:DOCKERHUB_USERNAME)/$d:$($env:GITHUB_SHA)"
             Write-Host "Pulling $imageName"
             docker pull $imageName
           }
 
-      # 🧩 6. (Tuỳ chọn) Chạy container sau khi pull xong
-      - name: Run containers
+      - name: Stop and remove old containers if exist
         run: |
           $services = "api-gateway","auth","product","order"
           foreach ($d in $services) {
-            $imageName = "${{ secrets.DOCKERHUB_USERNAME }}/$d:${{ github.sha }}"
-            Write-Host "Running container for $d"
-            docker run -d --name "$d" -p 8000:8000 $imageName
+            if (docker ps -a --format "{{.Names}}" | Select-String -Pattern "^$d$") {
+              Write-Host "Stopping and removing old container: $d"
+              docker stop $d
+              docker rm $d
+            }
+          }
+
+      - name: Run containers
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          $services = @{
+            "api-gateway" = 8000
+            "auth"        = 8001
+            "product"     = 8002
+            "order"       = 8003
+          }
+          foreach ($d in $services.Keys) {
+            $port = $services[$d]
+            $imageName = "$($env:DOCKERHUB_USERNAME)/$d:$($env:GITHUB_SHA)"
+            Write-Host "Running container for $d on port $port"
+            docker run -d --name $d -p "$port:8000" $imageName
           }
