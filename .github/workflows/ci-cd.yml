@@ -81,19 +81,22 @@ jobs:
             fi
           done
 
-      - name: ✅ Pull latest Docker images after push
-        run: |
-          set -e
-          for d in api-gateway auth product order; do
-            IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:latest
-            echo "Pulling latest image for $d"
-            docker pull $IMAGE_NAME
-          done
-
-      - name: 🚀 Run containers (optional)
-        run: |
-          for d in api-gateway auth product order; do
-            IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:latest
-            echo "Running container for $d"
-            docker run -d --name $d -p 3000:3000 $IMAGE_NAME || true
-          done
+  pull-to-local:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull latest Docker images to local machine via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.LOCAL_HOST }}
+          username: ${{ secrets.LOCAL_USER }}
+          key: ${{ secrets.LOCAL_SSH_KEY }}
+          script: |
+            echo "Pulling latest Docker images..."
+            for d in api-gateway auth product order; do
+              IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:latest
+              docker pull $IMAGE_NAME
+              docker stop $d || true
+              docker rm $d || true
+              docker run -d --name $d -p 3000:3000 $IMAGE_NAME
+            done
