@@ -74,29 +74,9 @@ jobs:
           set -e
           for d in api-gateway auth product order; do
             if [ -f "$d/Dockerfile" ]; then
-              IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:latest
+              IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:${{ github.sha }}
               echo "Building and pushing $IMAGE_NAME"
               docker build -t $IMAGE_NAME $d
               docker push $IMAGE_NAME
             fi
           done
-
-  pull-to-local:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Pull latest Docker images to local machine via SSH
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.LOCAL_HOST }}
-          username: ${{ secrets.LOCAL_USER }}
-          key: ${{ secrets.LOCAL_SSH_KEY }}
-          script: |
-            echo "Pulling latest Docker images..."
-            for d in api-gateway auth product order; do
-              IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:latest
-              docker pull $IMAGE_NAME
-              docker stop $d || true
-              docker rm $d || true
-              docker run -d --name $d -p 3000:3000 $IMAGE_NAME
-            done
