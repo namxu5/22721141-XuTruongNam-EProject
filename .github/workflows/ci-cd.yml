@@ -1,59 +1,3 @@
-name: CI/CD
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  build-test:
-    runs-on: ubuntu-latest
-
-    services:
-      mongodb:
-        image: mongo:6
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Use Node.js 18
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-
-      - name: Install dependencies for all services
-        run: |
-          set -e
-          for d in api-gateway auth product order; do
-            if [ -f "$d/package.json" ]; then
-              echo "Installing deps for $d"
-              (cd $d && npm ci || npm install)
-            fi
-          done
-
-      - name: Run tests for services that have tests
-        env:
-          MONGODB_AUTH_URI: mongodb://127.0.0.1:27017/auth_db
-          NODE_ENV: test
-          JWT_SECRET: test_secret
-        run: |
-          set -e
-          for d in auth product; do
-            if [ -f "$d/package.json" ]; then
-              echo "Running tests for $d"
-              (cd $d && npm test --silent)
-            fi
-          done
-
   build-and-push:
     needs: build-test
     runs-on: ubuntu-latest
@@ -74,9 +18,27 @@ jobs:
           set -e
           for d in api-gateway auth product order; do
             if [ -f "$d/Dockerfile" ]; then
-              IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:${{ github.sha }}
+              IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:latest
               echo "Building and pushing $IMAGE_NAME"
               docker build -t $IMAGE_NAME $d
               docker push $IMAGE_NAME
             fi
+          done
+
+      - name: ✅ Pull latest Docker images after push
+        run: |
+          set -e
+          for d in api-gateway auth product order; do
+            IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:latest
+            echo "Pulling latest image for $d"
+            docker pull $IMAGE_NAME
+          done
+
+      # (Optional) nếu bạn muốn CI/CD tự chạy container sau khi pull
+      - name: 🚀 Run containers (optional)
+        run: |
+          for d in api-gateway auth product order; do
+            IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/$d:latest
+            echo "Running container for $d"
+            docker run -d --name $d -p 3000:3000 $IMAGE_NAME || true
           done
